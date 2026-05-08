@@ -2,14 +2,8 @@ version: '3.8'
 
 services:
   unipark-frontend:
-    build: 
-      context: .
-      args:
-        - VITE_API_URL=${VITE_API_URL}
-        - VITE_OTHER_VAR=${VITE_OTHER_VAR}
+    build: .
     container_name: unipark_frontend
     ports:
       - "8081:8080"
     restart: always
-    env_file:
-      - .env.production
