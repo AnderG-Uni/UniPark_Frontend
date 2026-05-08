@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Nuestra Paleta Elegante Corporativa (SaaS)
+  Basada en las imágenes de UniPark 
+*/
+@theme {
+  /* El azul elegante del Sidebar */
+  --color-primary: #0F172A; 
+  --color-primary-light: #1E293B;
+
+  /* El amarillo/dorado de los acentos y botones */
+  --color-accent: #FBBF24;
+  --color-accent-hover: #F59E0B;
+
+  /* Fondos de la aplicación */
+  --color-background: #F8FAFC; /* Gris ultra claro, da aspecto limpio */
+  --color-surface: #FFFFFF;    /* Blanco puro para las tarjetas */
+
+  /* Sombras suaves en lugar de bordes duros */
+  --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Configuraciones base del cuerpo de la web */
+body {
+  background-color: var(--color-background);
+  color: var(--color-primary);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+
+/* Ocultar scrollbar para Chrome, Safari y Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Ocultar scrollbar para IE, Edge y Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
