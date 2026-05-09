@@ -13,6 +13,7 @@ import Profile from './pages/Profile/Profile.jsx';
 import History from './pages/History/History.jsx';
 import Scanner from './pages/Scanner/Scanner.jsx';
 import VehicleDetail from './pages/Vehicles/VehicleDetail.jsx';
+import Settings from './pages/Settings/Settings';
 
 
 // Importamos el Guardián y el Estado Global
@@ -37,6 +38,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Home />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/history" element={<History />} />
           </Route>
