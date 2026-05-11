@@ -3,7 +3,8 @@ import { X, Loader2, AlertCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import api from '../../services/api';
 
-export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona }) {
+// 🪄 AÑADIMOS 'sedes = []' COMO PROP
+export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona, sedes = [] }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -13,7 +14,7 @@ export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona }) {
   useEffect(() => {
     if (zona && isOpen) {
       reset({
-        sede_id: zona.sede_id?.toString() || "1",
+        sede_id: zona.sede_id?.toString() || "", // 🪄 Dejamos vacío por si no trae ID, obligando a elegir
         nombre: zona.nombre || '',
         codigo_zona: zona.codigo_zona || '',
         tipo_permitido: zona.tipo_permitido || 'Carro',
@@ -59,7 +60,7 @@ export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona }) {
         
         <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
           <h3 className="text-xl font-bold text-primary">Editar Parqueadero</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-full"><X size={20} /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 p-1.5 rounded-full transition-colors"><X size={20} /></button>
         </div>
 
         <div className="p-6">
@@ -85,8 +86,11 @@ export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona }) {
               <div className="col-span-2 sm:col-span-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sede *</label>
                 <select {...register('sede_id', { required: true })} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-accent text-slate-700">
-                  <option value="1">Sede Principal</option>
-                  <option value="2">Sede Norte</option>
+                  <option value="">Selecciona una sede...</option>
+                  {/* 🪄 MAPEO DINÁMICO DE SEDES */}
+                  {sedes.map((sede) => (
+                    <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+                  ))}
                 </select>
               </div>
 
@@ -112,8 +116,8 @@ export default function ZoneEditModal({ isOpen, onClose, onSuccess, zona }) {
             </div>
 
             <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
-              <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-500 font-semibold hover:bg-slate-100 rounded-xl">Cancelar</button>
-              <button type="submit" disabled={isLoading} className="bg-accent hover:bg-accent-hover text-primary font-bold py-2.5 px-6 rounded-xl shadow-soft flex items-center gap-2">
+              <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-500 font-semibold hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+              <button type="submit" disabled={isLoading} className="bg-accent hover:bg-accent-hover text-primary font-bold py-2.5 px-6 rounded-xl shadow-soft flex items-center gap-2 transition-all">
                 {isLoading ? <><Loader2 size={18} className="animate-spin" /> Guardando...</> : 'Actualizar'}
               </button>
             </div>

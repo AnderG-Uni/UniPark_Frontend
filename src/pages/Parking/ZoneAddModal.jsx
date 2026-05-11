@@ -3,14 +3,15 @@ import { X, Upload, Loader2, AlertCircle, Image as ImageIcon } from 'lucide-reac
 import { useForm } from 'react-hook-form';
 import api from '../../services/api';
 
-export default function ZoneAddModal({ isOpen, onClose, onSuccess }) {
+// 🪄 AÑADIMOS 'sedes' COMO PROP
+export default function ZoneAddModal({ isOpen, onClose, onSuccess, sedes = [] }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
 
   const { register, handleSubmit, reset } = useForm({
-    defaultValues: { sede_id: "1", tipo_permitido: "Carro" }
+    defaultValues: { sede_id: "", tipo_permitido: "Carro" } // sede_id vacío por defecto
   });
 
   if (!isOpen) return null;
@@ -33,7 +34,6 @@ export default function ZoneAddModal({ isOpen, onClose, onSuccess }) {
     setError(null);
 
     try {
-      // 🪄 PAYLOAD ACTUALIZADO: Ahora enviamos 'nombre' y 'codigo_zona' por separado
       const payload = {
         sede_id: parseInt(data.sede_id),
         nombre: data.nombre.trim(),
@@ -106,7 +106,6 @@ export default function ZoneAddModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* 🪄 NUEVO CAMPO: Nombre completo (ocupa ambas columnas) */}
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nombre de la Zona *</label>
                 <input {...register('nombre', { required: true })} type="text" placeholder="Ej: Parqueadero Principal Múltiple" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none text-slate-700" />
@@ -120,8 +119,11 @@ export default function ZoneAddModal({ isOpen, onClose, onSuccess }) {
               <div className="col-span-2 sm:col-span-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sede *</label>
                 <select {...register('sede_id', { required: true })} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none text-slate-700">
-                  <option value="1">Sede Principal</option>
-                  <option value="2">Sede Norte</option>
+                  <option value="">Selecciona una sede...</option>
+                  {/* 🪄 MAPEO DINÁMICO DE SEDES */}
+                  {sedes.map((sede) => (
+                    <option key={sede.id} value={sede.id}>{sede.nombre}</option>
+                  ))}
                 </select>
               </div>
 

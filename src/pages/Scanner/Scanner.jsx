@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, StopCircle, MapPin, CheckCircle, AlertCircle, UserPlus, QrCode, Loader2, Car, BadgeCheck, ShieldAlert } from 'lucide-react';
+import { Camera, StopCircle, MapPin, CheckCircle, AlertCircle, UserPlus, QrCode, Loader2, Car, BadgeCheck, ShieldAlert, Building2 } from 'lucide-react';
 import api from '../../services/api';
 
 export default function Scanner() {
   const [activeTab, setActiveTab] = useState('qr');
+  
+  const [sedes, setSedes] = useState([]);
   const [zonas, setZonas] = useState([]);
+  const [sedeId, setSedeId] = useState('');
   const [zonaId, setZonaId] = useState('');
+  
   const [observacion, setObservacion] = useState('');
   
   const [isScanning, setIsScanning] = useState(false);
@@ -18,28 +22,53 @@ export default function Scanner() {
   const [isVisitorLoading, setIsVisitorLoading] = useState(false);
 
   useEffect(() => {
-    const fetchZonas = async () => {
+    const fetchData = async () => {
       try {
-        const res = await api.get('/zonas');
-        const zonasData = res.data.data || res.data || [];
+        const [resSedes, resZonas] = await Promise.all([
+          api.get('/admin/sedes'),
+          api.get('/zonas')
+        ]);
+        
+        const sedesData = resSedes.data?.data || resSedes.data || [];
+        const zonasData = resZonas.data?.data || resZonas.data || [];
+        
+        setSedes(sedesData);
         setZonas(zonasData);
-        if (zonasData.length > 0) setZonaId(zonasData[0].id);
+
+        if (sedesData.length > 0) {
+          const primeraSedeId = sedesData[0].id.toString();
+          setSedeId(primeraSedeId);
+          
+          const zonasDeSede = zonasData.filter(z => z.sede_id?.toString() === primeraSedeId);
+          if (zonasDeSede.length > 0) setZonaId(zonasDeSede[0].id.toString());
+        }
       } catch (err) {
-        console.error("Error al cargar zonas:", err);
+        console.error("Error al cargar datos:", err);
       }
     };
-    fetchZonas();
+    fetchData();
 
     return () => {
       if (scannerRef.current && isScanning) {
         scannerRef.current.stop().catch(console.error);
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (sedeId && zonas.length > 0) {
+      const zonasDeSede = zonas.filter(z => z.sede_id?.toString() === sedeId);
+      if (zonasDeSede.length > 0) {
+        setZonaId(zonasDeSede[0].id.toString());
+      } else {
+        setZonaId(''); 
+      }
+    }
+  }, [sedeId, zonas]);
 
   const startScanner = async () => {
     if (!zonaId) {
-      setScanStatus({ type: 'error', message: 'Selecciona una zona.' });
+      setScanStatus({ type: 'error', message: 'Selecciona una zona válida primero.' });
       return;
     }
 
@@ -83,7 +112,7 @@ export default function Scanner() {
 
   const onScanSuccess = async (decodedText) => {
     await stopScanner();
-    setScanStatus({ type: 'loading', message: 'Consultando DB...' });
+    setScanStatus({ type: 'loading', message: 'Verificando seguridad...' });
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     
@@ -104,7 +133,10 @@ export default function Scanner() {
       
       setScanData({ ...datosBackend, accion });
       setScanStatus({ type: 'success', message: response.data?.message || '¡Acceso registrado!' });
-      setObservacion(''); 
+      
+      const resZonas = await api.get('/zonas');
+      setZonas(resZonas.data?.data || resZonas.data || []);
+      
     } catch (error) {
       const msg = error.response?.data?.message || 'Error al registrar el acceso.';
       setScanStatus({ type: 'error', message: msg });
@@ -138,7 +170,10 @@ export default function Scanner() {
 
       setScanStatus({ type: 'success', message: response.data?.message || `Acceso registrado.` });
       setPlacaVisitante('');
-      setObservacion('');
+      
+      const resZonas = await api.get('/zonas');
+      setZonas(resZonas.data?.data || resZonas.data || []);
+      
     } catch (error) {
       const msg = error.response?.data?.message || 'Error al registrar visitante.';
       setScanStatus({ type: 'error', message: msg });
@@ -147,12 +182,23 @@ export default function Scanner() {
     }
   };
 
-  // Función para volver a escanear rápido
   const resetAndScanAgain = () => {
     setScanStatus({ type: '', message: '' });
     setScanData(null);
     if (activeTab === 'qr') startScanner();
   };
+
+  const zonasFiltradas = zonas.filter(z => z.sede_id?.toString() === sedeId);
+
+  const selectedZonaObj = zonas.find(z => z.id.toString() === zonaId);
+  let capacidad = 0, ocupadas = 0, porcentaje = 0, colorBarra = 'bg-emerald-500';
+  
+  if (selectedZonaObj) {
+    capacidad = Number(selectedZonaObj.capacidad_total) || 0;
+    ocupadas = Number(selectedZonaObj.cupos_ocupados) || Number(selectedZonaObj.ocupadas) || 0;
+    porcentaje = capacidad > 0 ? (ocupadas / capacidad) * 100 : 0;
+    colorBarra = porcentaje > 90 ? 'bg-red-500' : porcentaje > 70 ? 'bg-orange-500' : 'bg-emerald-500';
+  }
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in duration-300 h-full w-full max-w-6xl mx-auto">
@@ -160,125 +206,163 @@ export default function Scanner() {
       <style>{`
         #qr-reader { width: 100% !important; border: none !important; }
         #qr-reader video { object-fit: cover !important; border-radius: 1rem !important; width: 100% !important; height: 100% !important; }
+        #qr-reader__dashboard_section_csr { display: none !important; }
       `}</style>
 
-      {/* ================= BARRA SUPERIOR (50/50: Selector y Pestañas) ================= */}
+      {/* ================= BARRA SUPERIOR CON DOS SELECTORES ================= */}
       <div className="flex flex-col md:flex-row items-center gap-4 w-full">
         
-        {/* Selector de Zona (Mitad Izquierda) */}
-        <div className="bg-surface p-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3 w-full md:w-1/2">
-          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><MapPin size={20} /></div>
-          <div className="flex-1">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Punto de Control (Zona) *</label>
-            <select 
-              value={zonaId} 
-              onChange={(e) => setZonaId(e.target.value)}
-              disabled={isScanning}
-              className="w-full bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-semibold focus:border-accent outline-none disabled:opacity-50"
-            >
-              {zonas.map(z => (
-                <option key={z.id} value={z.id}>{z.nombre} ({z.codigo_zona})</option>
-              ))}
-            </select>
+        <div className="bg-surface p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center gap-4 w-full md:w-2/3">
+          <div className="flex-1 w-full flex items-center gap-2">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hidden sm:block"><Building2 size={20} /></div>
+            <div className="flex-1">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5 pl-1">Sede Actual</label>
+              <select 
+                value={sedeId} 
+                onChange={(e) => setSedeId(e.target.value)}
+                disabled={isScanning}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-semibold focus:border-accent outline-none disabled:opacity-50"
+              >
+                {sedes.length === 0 ? <option value="">Cargando sedes...</option> : null}
+                {sedes.map(s => (
+                  <option key={s.id} value={s.id}>{s.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="hidden sm:block h-10 w-px bg-slate-200"></div>
+
+          <div className="flex-1 w-full flex items-center gap-2">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg hidden sm:block"><MapPin size={20} /></div>
+            <div className="flex-1">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5 pl-1">Punto de Control *</label>
+              <select 
+                value={zonaId} 
+                onChange={(e) => setZonaId(e.target.value)}
+                disabled={isScanning || zonasFiltradas.length === 0}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-semibold focus:border-accent outline-none disabled:opacity-50"
+              >
+                {zonasFiltradas.length === 0 ? (
+                  <option value="">Sin zonas en esta sede</option>
+                ) : (
+                  zonasFiltradas.map(z => (
+                    <option key={z.id} value={z.id}>
+                      {z.nombre} ({z.codigo_zona}) • {z.tipo_permitido}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Pestañas (Mitad Derecha) */}
-        <div className="flex gap-2 p-1.5 bg-slate-100 rounded-xl w-full md:w-1/2 md:justify-start justify-center">
+        <div className="flex gap-2 p-1.5 bg-slate-100 rounded-xl w-full md:w-1/3 md:justify-end justify-center">
           <button onClick={() => handleTabSwitch('qr')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'qr' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            <QrCode size={18} /> Escanear QR
+            <QrCode size={18} /> QR
           </button>
           <button onClick={() => handleTabSwitch('visitante')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'visitante' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-            <UserPlus size={18} /> Visitante Manual
+            <UserPlus size={18} /> Visitante
           </button>
         </div>
 
       </div>
 
       {/* ================= CONTENEDOR PRINCIPAL ================= */}
-      <div className="bg-surface rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col lg:flex-row min-h-[400px]">
+      {/* 🪄 REDUCCIÓN DEL ALTO MÍNIMO (min-h-[420px]) */}
+      <div className="bg-surface rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col lg:flex-row min-h-[420px]">
         
         {/* PESTAÑA ESCÁNER QR */}
         {activeTab === 'qr' && (
           <>
-            {/* LADO IZQUIERDO: LA CÁMARA (Más compacta) */}
-            <div className="w-full lg:w-1/2 p-4 lg:p-8 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/50">
+            {/* 🪄 REDUCCIÓN DE PADDING VERTICAL (py-3 o py-4) EN LUGAR DE p-8 */}
+            <div className="w-full lg:w-1/2 px-4 py-4 lg:px-6 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/50">
               
-              <div className="relative w-full max-w-[280px] aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-inner flex flex-col items-center justify-center border-4 border-slate-800 transition-all">
+              {/* 🪄 CÁMARA AJUSTADA (max-w-[360px]) */}
+              <div className="relative w-full max-w-[360px] aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-inner flex flex-col items-center justify-center transition-all">
                 
-                {/* Estado Pausado / Apagado */}
+                {/* 🪄 Ocultamos las esquinas blancas que la librería inyecta por defecto */}
+                <style>{`
+                  #qr-reader__scan_region img,
+                  #qr-reader__scan_region svg { 
+                    display: none !important; 
+                  }
+                `}</style>
+
                 {!isScanning && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center z-30 p-4 text-center bg-slate-900/95 backdrop-blur-sm">
-                    <QrCode size={48} className="mb-4 opacity-30 text-white" />
-                    <button onClick={startScanner} className="bg-accent hover:bg-accent-hover text-primary font-bold py-2.5 px-5 rounded-lg shadow-lg transition-all flex items-center gap-2 text-sm">
-                      <Camera size={18} /> {scanStatus.type === 'success' ? 'Siguiente' : 'Activar Cámara'}
+                    <QrCode size={56} className="mb-4 opacity-30 text-white" />
+                    <button onClick={startScanner} disabled={!zonaId} className="bg-accent hover:bg-accent-hover disabled:bg-slate-700 text-primary disabled:text-slate-500 font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all flex items-center gap-2 text-base">
+                      <Camera size={20} /> {scanStatus.type === 'success' ? 'Siguiente' : 'Activar Cámara'}
                     </button>
                   </div>
                 )}
-
+                
                 <div id="qr-reader" className="w-full h-full"></div>
                 
                 {isScanning && (
-                  <div className="absolute inset-0 pointer-events-none z-20">
-                    <div className="absolute top-4 left-4 w-8 h-8 border-t-4 border-l-4 border-accent rounded-tl-lg"></div>
-                    <div className="absolute top-4 right-4 w-8 h-8 border-t-4 border-r-4 border-accent rounded-tr-lg"></div>
-                    <div className="absolute bottom-4 left-4 w-8 h-8 border-b-4 border-l-4 border-accent rounded-bl-lg"></div>
-                    <div className="absolute bottom-4 right-4 w-8 h-8 border-b-4 border-r-4 border-accent rounded-br-lg"></div>
-                    <div className="absolute top-1/2 left-6 right-6 h-[2px] bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.7)] animate-pulse"></div>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    {/* 🪄 Contenedor invisible (sin bordes) solo para mantener el láser del tamaño correcto */}
+                    <div className="w-[280px] h-[280px] relative">
+                      <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)] animate-pulse"></div>
+                    </div>
                   </div>
                 )}
-
+                
                 {isScanning && (
-                  <button onClick={stopScanner} className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/80 hover:bg-red-500/90 backdrop-blur text-white font-bold py-1.5 px-4 rounded-full shadow-lg transition-all flex items-center gap-2 z-30 text-xs border border-slate-700">
-                    <StopCircle size={16} /> Detener
+                  <button onClick={stopScanner} className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-800/90 hover:bg-red-500 backdrop-blur text-white font-bold py-2 px-5 rounded-full shadow-lg transition-all flex items-center gap-2 z-30 text-sm border border-slate-600/50">
+                    <StopCircle size={18} /> Detener
                   </button>
                 )}
               </div>
 
-              {/* Input Observación */}
-              <div className="w-full max-w-[280px] mt-4">
-                <input 
-                  type="text" 
-                  value={observacion}
-                  onChange={(e) => setObservacion(e.target.value)}
-                  placeholder="Observación (Opcional)..."
-                  disabled={isScanning || scanStatus.type === 'loading'}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-accent text-slate-700 outline-none transition-all disabled:opacity-50 text-sm"
-                />
-              </div>
+              {/* 🪄 BARRA DE OCUPACIÓN (MÁS CERCA DE LA CÁMARA mt-4) */}
+              {selectedZonaObj && (
+                <div className="w-full max-w-[360px] mt-4 flex flex-col px-1">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-sm font-bold text-slate-500 tracking-wide">
+                      Capacidad: <span className="text-slate-800">{capacidad}</span>
+                    </span>
+                    <span className="text-sm font-bold text-slate-500 tracking-wide">
+                      Ocupados: <span className="text-slate-800">{ocupadas}</span>
+                    </span>
+                    <span className="text-xs font-black text-slate-700 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">
+                      {Math.round(porcentaje)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                    <div className={`h-full rounded-full transition-all duration-500 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* LADO DERECHO: RESULTADOS (Compacto) */}
+            {/* LADO DERECHO: RESULTADOS */}
             <div className="w-full lg:w-1/2 p-4 lg:p-8 flex flex-col justify-center">
-              
               {!scanStatus.type && (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60 text-center">
                   <BadgeCheck size={64} strokeWidth={1} className="mb-3 text-slate-300" />
                   <p className="text-lg font-medium text-slate-500">Esperando Escaneo</p>
                 </div>
               )}
-
               {scanStatus.type === 'loading' && (
                 <div className="flex flex-col items-center justify-center h-full text-blue-500 animate-pulse">
                   <Loader2 size={48} className="animate-spin mb-3" />
                   <p className="font-bold text-sm">{scanStatus.message}</p>
                 </div>
               )}
-
               {scanStatus.type === 'error' && (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <ShieldAlert size={56} className="text-red-400 mb-3" />
                   <h3 className="text-xl font-black text-slate-800 mb-2">Acceso Denegado</h3>
-                  <p className="text-red-500 font-medium bg-red-50 px-4 py-2 rounded-lg border border-red-200 text-sm">{scanStatus.message}</p>
+                  <p className="text-red-500 font-medium bg-red-50 px-4 py-2 rounded-lg border border-red-200 text-sm max-w-sm">{scanStatus.message}</p>
                 </div>
               )}
-
               {scanStatus.type === 'success' && scanData && (
                 <div className="flex flex-col items-center h-full animate-in zoom-in-95 duration-300 pt-2">
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 shadow-inner ${scanData.accion === 'INGRESO' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
                     <CheckCircle size={28} />
                   </div>
-                  
                   <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-1">
                     {scanData.accion === 'INGRESO' ? 'Ingreso Autorizado' : 'Salida Registrada'}
                   </h3>
@@ -295,7 +379,6 @@ export default function Scanner() {
                         <span className="font-bold text-slate-700 capitalize text-sm leading-none">{scanData.vehiculo?.tipo} • {scanData.vehiculo?.marca || 'N/A'}</span>
                       </div>
                     </div>
-                    
                     <div className="flex flex-col gap-2 pt-1 text-sm">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Propietario</span>
@@ -311,7 +394,6 @@ export default function Scanner() {
                       </div>
                     </div>
                   </div>
-                  
                   <button onClick={resetAndScanAgain} className="mt-5 bg-accent hover:bg-accent-hover text-primary font-bold py-2.5 px-6 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 text-sm w-full max-w-sm">
                     <QrCode size={16} /> Escanear otro vehículo
                   </button>
@@ -340,16 +422,32 @@ export default function Scanner() {
                 </div>
               )}
 
-              <form onSubmit={handleVisitorSubmit} className="flex flex-col gap-3">
+              <form onSubmit={handleVisitorSubmit} className="flex flex-col gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Placa del Vehículo *</label>
-                  <input type="text" required value={placaVisitante} onChange={(e) => setPlacaVisitante(e.target.value)} placeholder="Ej: QWY52P" className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-accent text-slate-800 outline-none transition-all uppercase font-black text-lg tracking-widest text-center" />
+                  <input type="text" required value={placaVisitante} onChange={(e) => setPlacaVisitante(e.target.value)} placeholder="Ej: QWY52P" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 focus:border-accent text-slate-800 outline-none transition-all uppercase font-black text-lg tracking-widest text-center" />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Observación / Motivo</label>
-                  <input type="text" value={observacion} onChange={(e) => setObservacion(e.target.value)} placeholder="Ej: Mensajería externa" className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-accent text-slate-700 outline-none transition-all text-sm" />
-                </div>
-                <button type="submit" disabled={isVisitorLoading || !zonaId} className="mt-2 bg-primary hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all disabled:opacity-70 text-sm">
+                
+                {selectedZonaObj && (
+                  <div className="w-full mt-2 flex flex-col px-1">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-bold text-slate-500 tracking-wide">
+                        Capacidad: <span className="text-slate-800">{capacidad}</span>
+                      </span>
+                      <span className="text-sm font-bold text-slate-500 tracking-wide">
+                        Ocupados: <span className="text-slate-800">{ocupadas}</span>
+                      </span>
+                      <span className="text-xs font-black text-slate-700 bg-white px-2 py-1 rounded-md border border-slate-200 shadow-sm">
+                        {Math.round(porcentaje)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                      <div className={`h-full rounded-full transition-all duration-500 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+                    </div>
+                  </div>
+                )}
+
+                <button type="submit" disabled={isVisitorLoading || !zonaId} className="mt-3 bg-primary hover:bg-slate-800 text-white font-bold py-3 rounded-lg shadow-sm flex items-center justify-center gap-2 transition-all disabled:opacity-70 text-sm">
                   {isVisitorLoading ? <><Loader2 size={16} className="animate-spin" /> Registrando...</> : 'Registrar Visitante'}
                 </button>
               </form>
