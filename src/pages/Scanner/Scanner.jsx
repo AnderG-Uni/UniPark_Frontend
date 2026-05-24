@@ -17,6 +17,9 @@ export default function Scanner() {
   const [scanStatus, setScanStatus] = useState({ type: '', message: '' }); 
   const [scanData, setScanData] = useState(null); 
   const scannerRef = useRef(null);
+  
+  // 🪄 NUEVO: Referencia para el auto-scroll en móviles
+  const resultsRef = useRef(null);
 
   const [placaVisitante, setPlacaVisitante] = useState('');
   const [isVisitorLoading, setIsVisitorLoading] = useState(false);
@@ -66,6 +69,15 @@ export default function Scanner() {
     }
   }, [sedeId, zonas]);
 
+  // 🪄 NUEVO EFECTO: Auto-scroll en dispositivos móviles cuando hay un resultado
+  useEffect(() => {
+    if (scanStatus.type !== '' && window.innerWidth < 1024 && resultsRef.current) {
+      setTimeout(() => {
+        resultsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100); // Pequeño retraso para dar tiempo a que el DOM se dibuje
+    }
+  }, [scanStatus]);
+
   const startScanner = async () => {
     if (!zonaId) {
       setScanStatus({ type: 'error', message: 'Selecciona una zona válida primero.' });
@@ -82,7 +94,7 @@ export default function Scanner() {
       await html5QrCode.start(
         { facingMode: "environment" }, 
         {
-          fps: 30, 
+          fps: 10, 
           qrbox: { width: 280, height: 280 }, 
           aspectRatio: 1.0,
           formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
@@ -186,6 +198,11 @@ export default function Scanner() {
     setScanStatus({ type: '', message: '' });
     setScanData(null);
     if (activeTab === 'qr') startScanner();
+    
+    // Regresar la pantalla arriba en móviles al limpiar
+    if (window.innerWidth < 1024) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const zonasFiltradas = zonas.filter(z => z.sede_id?.toString() === sedeId);
@@ -201,7 +218,8 @@ export default function Scanner() {
   }
 
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in duration-300 h-full w-full max-w-6xl mx-auto">
+    // 🪄 CAMBIO CLAVE AQUÍ: Cambiamos 'h-full' por 'min-h-full'
+    <div className="flex flex-col gap-4 animate-in fade-in duration-300 min-h-full w-full max-w-6xl mx-auto pb-6">
       
       <style>{`
         #qr-reader { width: 100% !important; border: none !important; }
@@ -269,24 +287,18 @@ export default function Scanner() {
       </div>
 
       {/* ================= CONTENEDOR PRINCIPAL ================= */}
-      {/* 🪄 REDUCCIÓN DEL ALTO MÍNIMO (min-h-[420px]) */}
       <div className="bg-surface rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col lg:flex-row min-h-[420px]">
         
         {/* PESTAÑA ESCÁNER QR */}
         {activeTab === 'qr' && (
           <>
-            {/* 🪄 REDUCCIÓN DE PADDING VERTICAL (py-3 o py-4) EN LUGAR DE p-8 */}
             <div className="w-full lg:w-1/2 px-4 py-4 lg:px-6 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/50">
               
-              {/* 🪄 CÁMARA AJUSTADA (max-w-[360px]) */}
               <div className="relative w-full max-w-[360px] aspect-square bg-slate-900 rounded-2xl overflow-hidden shadow-inner flex flex-col items-center justify-center transition-all">
                 
-                {/* 🪄 Ocultamos las esquinas blancas que la librería inyecta por defecto */}
                 <style>{`
                   #qr-reader__scan_region img,
-                  #qr-reader__scan_region svg { 
-                    display: none !important; 
-                  }
+                  #qr-reader__scan_region svg { display: none !important; }
                 `}</style>
 
                 {!isScanning && (
@@ -302,7 +314,6 @@ export default function Scanner() {
                 
                 {isScanning && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    {/* 🪄 Contenedor invisible (sin bordes) solo para mantener el láser del tamaño correcto */}
                     <div className="w-[280px] h-[280px] relative">
                       <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.8)] animate-pulse"></div>
                     </div>
@@ -316,7 +327,6 @@ export default function Scanner() {
                 )}
               </div>
 
-              {/* 🪄 BARRA DE OCUPACIÓN (MÁS CERCA DE LA CÁMARA mt-4) */}
               {selectedZonaObj && (
                 <div className="w-full max-w-[360px] mt-4 flex flex-col px-1">
                   <div className="flex justify-between items-center mb-1.5">
@@ -338,28 +348,29 @@ export default function Scanner() {
             </div>
 
             {/* LADO DERECHO: RESULTADOS */}
-            <div className="w-full lg:w-1/2 p-4 lg:p-8 flex flex-col justify-center">
+            {/* 🪄 NUEVO: Le asignamos la referencia para el auto-scroll */}
+            <div ref={resultsRef} className="w-full lg:w-1/2 p-4 lg:p-8 flex flex-col justify-center min-h-[300px]">
               {!scanStatus.type && (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60 text-center">
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60 text-center py-10">
                   <BadgeCheck size={64} strokeWidth={1} className="mb-3 text-slate-300" />
                   <p className="text-lg font-medium text-slate-500">Esperando Escaneo</p>
                 </div>
               )}
               {scanStatus.type === 'loading' && (
-                <div className="flex flex-col items-center justify-center h-full text-blue-500 animate-pulse">
+                <div className="flex flex-col items-center justify-center h-full text-blue-500 animate-pulse py-10">
                   <Loader2 size={48} className="animate-spin mb-3" />
                   <p className="font-bold text-sm">{scanStatus.message}</p>
                 </div>
               )}
               {scanStatus.type === 'error' && (
-                <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="flex flex-col items-center justify-center h-full text-center py-8">
                   <ShieldAlert size={56} className="text-red-400 mb-3" />
                   <h3 className="text-xl font-black text-slate-800 mb-2">Acceso Denegado</h3>
                   <p className="text-red-500 font-medium bg-red-50 px-4 py-2 rounded-lg border border-red-200 text-sm max-w-sm">{scanStatus.message}</p>
                 </div>
               )}
               {scanStatus.type === 'success' && scanData && (
-                <div className="flex flex-col items-center h-full animate-in zoom-in-95 duration-300 pt-2">
+                <div className="flex flex-col items-center h-full animate-in zoom-in-95 duration-300 pt-2 pb-6">
                   <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 shadow-inner ${scanData.accion === 'INGRESO' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
                     <CheckCircle size={28} />
                   </div>
