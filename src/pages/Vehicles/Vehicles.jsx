@@ -31,19 +31,33 @@ export default function Vehicles() {
   const [vehicleToEdit, setVehicleToEdit] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // ESTADOS PARA PAGINACIÓN (SOLO ADMIN)
+// ESTADOS PARA PAGINACIÓN (SOLO ADMIN)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPagesServer, setTotalPagesServer] = useState(1); // 🪄 Nuevo estado para atrapar la data del backend
 
   const fetchVehiculos = async () => {
     try {
       setIsLoading(true);
       
-      // El frontend decide qué ruta consumir basado en su rol
-      const endpoint = isAdmin ? '/vehiculos' : '/vehiculos/mis-vehiculos';
+      // 🪄 Inyectamos los parámetros en la URL para el Admin
+      const endpoint = isAdmin 
+        ? `/vehiculos?page=${currentPage}&limit=${itemsPerPage}` 
+        : '/vehiculos/mis-vehiculos';
       
       const response = await api.get(endpoint);
-      setVehiculos(response.data.data || response.data || []);
+      const payloadVehiculos = response.data?.data;
+
+      if (isAdmin && payloadVehiculos?.meta) {
+        // Asignamos la data real y las páginas calculadas por la Base de Datos
+        setVehiculos(payloadVehiculos.data || []);
+        setTotalPagesServer(payloadVehiculos.meta.totalPaginas || 1);
+      } else {
+        // Fallback para usuarios (sin paginación de backend)
+        let vehiculosData = Array.isArray(payloadVehiculos) ? payloadVehiculos : (payloadVehiculos?.data || []);
+        setVehiculos(vehiculosData);
+        setTotalPagesServer(Math.ceil(vehiculosData.length / itemsPerPage) || 1);
+      }
     } catch (err) {
       console.error("Error al cargar vehículos:", err);
       setError("Ocurrió un error al intentar obtener los vehículos.");
@@ -52,10 +66,11 @@ export default function Vehicles() {
     }
   };
 
+  // currentPage e itemsPerPage como dependencias para que vuelva a consultar al cambiar
   useEffect(() => {
     fetchVehiculos();
     if (setDynamicBreadcrumb) setDynamicBreadcrumb(null);
-  }, [setDynamicBreadcrumb]);
+  }, [setDynamicBreadcrumb, currentPage, itemsPerPage]);
 
   // Funciones del QR
   const handleOpenQR = (vehiculo) => {
@@ -100,16 +115,18 @@ export default function Vehicles() {
     // Pronto haremos la alerta de confirmación
   };
 
-  // 🪄 LÓGICA DE PAGINACIÓN
-  const totalPages = Math.ceil(vehiculos.length / itemsPerPage);
-  
+
+  // se obtienen los vehículos actuales para la tabla
   const currentVehicles = useMemo(() => {
+    // Si es admin, el backend ya envía exactamente la porción correcta. Si es usuario, paginamos local.
+    if (isAdmin) return vehiculos;
+    
     const start = (currentPage - 1) * itemsPerPage;
     return vehiculos.slice(start, start + itemsPerPage);
-  }, [vehiculos, currentPage, itemsPerPage]);
+  }, [vehiculos, currentPage, itemsPerPage, isAdmin]);
 
   const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
+    if (newPage >= 1 && newPage <= totalPagesServer) {
       setCurrentPage(newPage);
     }
   };
@@ -311,7 +328,7 @@ export default function Vehicles() {
 
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-slate-500">
-                    Página <span className="font-semibold text-slate-700">{currentPage}</span> de <span className="font-semibold text-slate-700">{totalPages}</span>
+                    Página <span className="font-semibold text-slate-700">{currentPage}</span> de <span className="font-semibold text-slate-700">{totalPagesServer}</span>
                   </span>
                   <div className="flex items-center gap-1">
                     <button 
@@ -323,7 +340,7 @@ export default function Vehicles() {
                     </button>
                     <button 
                       onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === totalPagesServer}
                       className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-primary disabled:opacity-50 disabled:pointer-events-none transition-colors"
                     >
                       <ChevronRight size={18} />

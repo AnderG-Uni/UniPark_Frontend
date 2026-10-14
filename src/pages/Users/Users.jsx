@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users as UsersIcon, Plus, Edit, ShieldAlert, Trash2, Loader2, AlertCircle, Check, GraduationCap, Eye } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Users as UsersIcon, Plus, Edit, ShieldAlert, Trash2, Loader2, AlertCircle, Check, GraduationCap, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import UserModal from './UserModal'; 
@@ -12,26 +12,39 @@ export default function Users() {
   const [modalState, setModalState] = useState({ isOpen: false, mode: 'create', data: null });
   const [toastMessage, setToastMessage] = useState(null);
 
+  // 🪄 ESTADOS DE PAGINACIÓN
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPagesServer, setTotalPagesServer] = useState(1);
+
   const fetchUsuarios = async () => {
     try {
       setIsLoading(true);
+      // Pedimos datos. Si el backend soporta paginación, le pasamos los parámetros
       const [resUsuarios, resPersonas] = await Promise.all([
-        api.get('/usuarios'),
+        api.get(`/usuarios?page=${currentPage}&limit=${itemsPerPage}`),
         api.get('/personas')
       ]); 
 
-      const usuariosData = Array.isArray(resUsuarios.data) ? resUsuarios.data : (resUsuarios.data?.data || []);
+      const payloadUsuarios = resUsuarios.data?.data;
+      const usuariosData = Array.isArray(payloadUsuarios) ? payloadUsuarios : (payloadUsuarios?.data || resUsuarios.data || []);
       const personasData = Array.isArray(resPersonas.data) ? resPersonas.data : (resPersonas.data?.data || []);
 
+      // Cruzamos la data
       const dataCruzada = usuariosData.map(usuario => {
         const personaEncontrada = personasData.find(p => Number(p.id) === Number(usuario.persona_id));
-        return {
-          ...usuario,
-          persona: personaEncontrada || null 
-        };
+        return { ...usuario, persona: personaEncontrada || null };
       });
 
       setUsuarios(dataCruzada);
+
+      // Verificamos si el backend envió el total de páginas (meta)
+      if (payloadUsuarios?.meta) {
+        setTotalPagesServer(payloadUsuarios.meta.totalPaginas || 1);
+      } else {
+        // Fallback a paginación local si el backend devuelve todo de golpe
+        setTotalPagesServer(Math.ceil(dataCruzada.length / itemsPerPage) || 1);
+      }
     } catch (err) {
       console.error("Error al cargar usuarios:", err);
       setError("No se pudo cargar la lista cruzada de usuarios y personas.");
@@ -42,11 +55,20 @@ export default function Users() {
 
   useEffect(() => {
     fetchUsuarios();
-  }, []);
+  }, [currentPage, itemsPerPage]); // 🪄 Se recarga si cambia la página
 
-  const openModal = (mode, data = null) => {
-    setModalState({ isOpen: true, mode, data });
+  // 🪄 Paginación Local por si el backend mandó toda la lista
+  const currentUsers = useMemo(() => {
+    if (usuarios.length <= itemsPerPage && totalPagesServer > 1) return usuarios; // El backend ya paginó
+    const start = (currentPage - 1) * itemsPerPage;
+    return usuarios.slice(start, start + itemsPerPage);
+  }, [usuarios, currentPage, itemsPerPage, totalPagesServer]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPagesServer) setCurrentPage(newPage);
   };
+
+  const openModal = (mode, data = null) => setModalState({ isOpen: true, mode, data });
 
   const handleUpdateSuccess = (mensaje) => {
     fetchUsuarios(); 
@@ -54,17 +76,15 @@ export default function Users() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Estilos de los Roles
   const getRoleStyle = (rol) => {
     switch(rol) {
       case 'Administrador': return 'bg-purple-100 text-purple-700 border-purple-200';
       case 'Guarda': return 'bg-orange-100 text-orange-700 border-orange-200';
       case 'Docente': return 'bg-blue-100 text-blue-700 border-blue-200';
-      default: return 'bg-slate-100 text-slate-600 border-slate-200'; // Estudiante
+      default: return 'bg-slate-100 text-slate-600 border-slate-200'; 
     }
   };
 
-  // 🪄 NUEVO: Estilos para los Estados (Basados en tu ENUM)
   const getStatusStyle = (estado) => {
     switch(estado) {
       case 'Activo': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -77,7 +97,6 @@ export default function Users() {
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-300 h-full relative">
       
-      {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div className="fixed bottom-8 right-8 z-[150] bg-slate-800 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-8 fade-in duration-300">
           <div className="w-8 h-8 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center">
@@ -87,7 +106,6 @@ export default function Users() {
         </div>
       )}
 
-      {/* MODAL INTELIGENTE */}
       <UserModal 
         isOpen={modalState.isOpen}
         mode={modalState.mode}
@@ -96,7 +114,6 @@ export default function Users() {
         onUpdateSuccess={handleUpdateSuccess}
       />
 
-      {/* ENCABEZADO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-6 rounded-2xl shadow-sm border border-slate-100">
         <div>
           <h2 className="text-2xl font-bold text-primary flex items-center gap-2">
@@ -111,16 +128,12 @@ export default function Users() {
           onClick={() => openModal('create')}
           className="bg-accent hover:bg-accent-hover text-primary font-bold py-2.5 px-5 rounded-xl shadow-soft hover:shadow-hover transition-all flex items-center gap-2"
         >
-          <Plus size={20} />
-          Nuevo Usuario
+          <Plus size={20} /> Nuevo Usuario
         </button>
       </div>
 
-      {/* CONTENIDO PRINCIPAL (Tabla) */}
-      <div className="flex-1 bg-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-0">
-
-        {/* Tabla de Datos (Ajustada para usar todo el alto) */}
-        <div className="overflow-y-auto flex-1 h-full">
+      <div className="flex-1 bg-surface rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <div className="overflow-y-auto flex-1 p-0">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-full text-primary gap-4 min-h-[300px]">
               <Loader2 size={40} className="animate-spin text-accent" />
@@ -137,9 +150,9 @@ export default function Users() {
                 <p>No hay usuarios registrados.</p>
              </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[1000px] h-full">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
-                <tr className="border-b-2 border-slate-100 text-primary bg-white sticky top-0 z-10">
+                <tr className="border-b-2 border-slate-100 text-primary bg-slate-50/90 backdrop-blur-md sticky top-0 z-10">
                   <th className="py-4 px-6 font-semibold text-sm">Nombre / Documento</th>
                   <th className="py-4 px-6 font-semibold text-sm">Institucional</th>
                   <th className="py-4 px-6 font-semibold text-sm">Contacto</th>
@@ -148,7 +161,7 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="text-slate-600 text-sm align-top">
-                {usuarios.map((u) => {
+                {currentUsers.map((u) => {
                   const nombre = u.persona?.nombres_completos || 'Sin nombre registrado';
                   const tipoDoc = u.persona?.tipo_documento || 'DOC';
                   const documento = u.persona?.numero_documento || '---';
@@ -176,8 +189,7 @@ export default function Users() {
 
                       <td className="py-4 px-6">
                         <p className="font-medium text-slate-700 capitalize flex items-center gap-1.5">
-                          <GraduationCap size={14} className="text-slate-400" />
-                          {carrera}
+                          <GraduationCap size={14} className="text-slate-400" /> {carrera}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5">
                           <p className="text-[11px] text-slate-500 uppercase">
@@ -189,9 +201,8 @@ export default function Users() {
                         </div>
                       </td>
 
-                      {/* 🪄 CORREO MÁS ANCHO: max-w ampliado */}
                       <td className="py-4 px-6">
-                        <p className="font-medium text-slate-700 truncate max-w-[220px] lg:max-w-[280px] xl:max-w-[320px]" title={u.correo}>{u.correo}</p>
+                        <p className="font-medium text-slate-700 truncate max-w-[220px] lg:max-w-[280px]" title={u.correo}>{u.correo}</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">TEL: {telefono}</p>
                       </td>
 
@@ -201,31 +212,22 @@ export default function Users() {
                         </span>
                       </td>
 
-                      {/* 🪄 NUEVO BOTÓN: Ojo (Ver) añadido */}
                       <td className="py-4 px-6">
                         <div className="flex items-center justify-center gap-2 opacity-100 sm:opacity-40 group-hover:opacity-100 transition-opacity">
-                          
-                          <Link 
-                            to={`/users/${u.id}`} 
-                            state={{ usuarioData: u }} 
-                            className="p-2 text-slate-400 hover:text-white hover:bg-emerald-500 rounded-lg transition-all border border-slate-200 hover:border-emerald-500 shadow-sm" 
-                            title="Ver Perfil Completo"
-                            >
+                          <Link to={`/users/${u.id}`} state={{ usuarioData: u }} className="p-2 text-slate-400 hover:text-white hover:bg-emerald-500 rounded-lg transition-all border border-slate-200 hover:border-emerald-500 shadow-sm" title="Ver Perfil">
                             <Eye size={16} />
                           </Link>
-
-                          <button onClick={() => openModal('edit', u)} className="p-2 text-slate-400 hover:text-white hover:bg-primary rounded-lg transition-all border border-slate-200 hover:border-primary shadow-sm" title="Editar Datos Personales">
+                          <button onClick={() => openModal('edit', u)} className="p-2 text-slate-400 hover:text-white hover:bg-primary rounded-lg transition-all border border-slate-200 hover:border-primary shadow-sm" title="Editar">
                             <Edit size={16} />
                           </button>
-                          <button onClick={() => openModal('role', u)} className="p-2 text-slate-400 hover:text-white hover:bg-accent rounded-lg transition-all border border-slate-200 hover:border-accent shadow-sm" title="Actualizar datos usuario">
+                          <button onClick={() => openModal('role', u)} className="p-2 text-slate-400 hover:text-white hover:bg-accent rounded-lg transition-all border border-slate-200 hover:border-accent shadow-sm" title="Actualizar Rol">
                             <ShieldAlert size={16} />
                           </button>
-                          <button onClick={() => openModal('delete', u)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all border border-red-100 hover:border-red-500 shadow-sm" title="Eliminar Usuario">
+                          <button onClick={() => openModal('delete', u)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-all border border-red-100 hover:border-red-500 shadow-sm" title="Eliminar">
                             <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
-
                     </tr>
                   );
                 })}
@@ -233,8 +235,40 @@ export default function Users() {
             </table>
           )}
         </div>
-      </div>
 
+        {/* 🪄 PAGINACIÓN WEB AL FINAL DE LA TABLA */}
+        {usuarios.length > 0 && !isLoading && !error && (
+          <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 p-4 bg-white">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span>Mostrar</span>
+              <select 
+                className="border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-accent text-slate-700"
+                value={itemsPerPage}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+              <span>registros</span>
+            </div>
+
+            <div className="flex items-center gap-4 mt-4 sm:mt-0">
+              <span className="text-sm text-slate-500">
+                Página <span className="font-semibold text-slate-700">{currentPage}</span> de <span className="font-semibold text-slate-700">{totalPagesServer}</span>
+              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors">
+                  <ChevronLeft size={18} />
+                </button>
+                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPagesServer} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors">
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

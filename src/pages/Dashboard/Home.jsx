@@ -33,7 +33,9 @@ export default function Home() {
         // CARGA PARA ADMINISTRADORES
         try {
           const resVehiculos = await api.get('/vehiculos');
-          let vehiculosData = resVehiculos.data.data || resVehiculos.data || [];
+          // La respuesta del axios trae "data", luego tu JSON trae "data", y dentro de eso está el array "data".
+          let payloadVehiculos = resVehiculos.data?.data;
+          let vehiculosData = Array.isArray(payloadVehiculos) ? payloadVehiculos : (payloadVehiculos?.data || []);
           // Ordenamos por fecha de registro descendente (los más nuevos primero)
           vehiculosData.sort((a, b) => new Date(b.fecha_registro) - new Date(a.fecha_registro));
           setVehiculos(vehiculosData);

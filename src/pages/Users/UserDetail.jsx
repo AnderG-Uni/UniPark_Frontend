@@ -44,7 +44,7 @@ export default function UserDetail() {
     return () => { if (setDynamicBreadcrumb) setDynamicBreadcrumb(null); };
   }, [id, userData, setDynamicBreadcrumb, navigate]);
 
-  // 🪄 NUEVO EFECTO: Buscar los vehículos de esta persona
+  //  Buscar los vehículos de esta persona
   useEffect(() => {
     const fetchUserVehicles = async () => {
       if (!userData?.persona?.id) {
